@@ -50,6 +50,11 @@ foreach ($exe in @("ffmpeg.exe", "ffplay.exe", "ffprobe.exe")) {
   }
 }
 
+# Avoid Windows file lock errors when cargo tries to replace shadowverse.exe.
+Get-Process -Name "shadowverse" -ErrorAction SilentlyContinue | ForEach-Object {
+  Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+}
+
 # Free stale Vite port if old dev process is still holding it.
 $portPids = @()
 $lines = cmd /c "netstat -ano | findstr :8054"

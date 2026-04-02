@@ -45,6 +45,11 @@ foreach ($exe in @("ffmpeg.exe", "ffplay.exe", "ffprobe.exe")) {
   }
 }
 
+# Avoid Windows file lock errors when cargo tries to replace shadowverse.exe.
+Get-Process -Name "shadowverse" -ErrorAction SilentlyContinue | ForEach-Object {
+  Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+}
+
 Set-Location $projectRoot
 corepack yarn tauri build
 
