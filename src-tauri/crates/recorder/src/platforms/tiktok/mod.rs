@@ -404,6 +404,51 @@ impl TikTokRecorder {
                         });
                 }
                 self.log_error(&format!("Update room status failed: {}", e));
+
+                // If room-info APIs are blocked/intermittent, fall back to direct stream probing.
+                if !pre_live_status {
+                    let fallback_stream = if self.is_room_id_numeric() {
+                        match api::get_stream_url_by_room_id(
+                            &self.client,
+                            &self.account,
+                            &self.room_id,
+                        )
+                        .await
+                        {
+                            Ok(info) => Ok(info),
+                            Err(_) => {
+                                api::get_stream_url_with_feed_override(
+                                    &self.client,
+                                    &self.account,
+                                    &url,
+                                    feed_override,
+                                )
+                                .await
+                            }
+                        }
+                    } else {
+                        api::get_stream_url_with_feed_override(
+                            &self.client,
+                            &self.account,
+                            &url,
+                            feed_override,
+                        )
+                        .await
+                    };
+
+                    if let Ok(stream_info) = fallback_stream {
+                        *self.extra.stream_info.write().await = Some(stream_info);
+                        self.last_update
+                            .store(Utc::now().timestamp(), atomic::Ordering::Relaxed);
+                        self.room_info.write().await.status = true;
+                        let _ = self.event_channel.send(RecorderEvent::LiveStart {
+                            recorder: self.info().await,
+                        });
+                        self.log_info("Room marked live by stream probe after room-info error");
+                        return true;
+                    }
+                }
+
                 pre_live_status
             }
         }
