@@ -68,6 +68,11 @@
   let httpProxy = "127.0.0.1:7890";
   let httpsProxy = "";
 
+  function toTrimmedString(value: unknown): string {
+    if (value === null || value === undefined) return "";
+    return String(value).trim();
+  }
+
   function updateTheme() {
     localStorage.setItem("theme", darkMode ? "dark" : "light");
     document.documentElement.classList.toggle("dark", darkMode);
@@ -99,7 +104,7 @@
       proxyHost = parts.slice(0, -1).join(":") || "127.0.0.1";
       proxyPort = parts[parts.length - 1] || "7890";
     }
-    proxyEnabled = proxyValue.trim().length > 0;
+    proxyEnabled = toTrimmedString(proxyValue).length > 0;
     console.log(config);
   }
 
@@ -259,10 +264,10 @@
   }
 
   async function update_network_config() {
-    const httpProxyValue = httpProxy.trim();
-    const httpsProxyValue = httpsProxy.trim();
-    const port = proxyEnabled ? proxyPort.trim() : "";
-    const host = proxyHost.trim() || "127.0.0.1";
+    const httpProxyValue = toTrimmedString(httpProxy);
+    const httpsProxyValue = toTrimmedString(httpsProxy);
+    const port = proxyEnabled ? toTrimmedString(proxyPort) : "";
+    const host = toTrimmedString(proxyHost) || "127.0.0.1";
     const proxyUrl = port ? `http://${host}:${port}` : "";
     const finalHttpProxy = httpProxyValue || proxyUrl;
     const finalHttpsProxy = httpsProxyValue;
