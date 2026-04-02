@@ -1233,6 +1233,12 @@ fn build_profile_referer(handle: &str) -> String {
     }
 }
 
+fn is_tiktok_live_status_flag(flag: i64) -> bool {
+    // TikTok has used different numeric enums across endpoints/periods.
+    // We currently treat 1/2 as "live" and rely on stream/alive fields as an additional signal.
+    flag == 1 || flag == 2
+}
+
 fn extract_room_id_from_state(value: &Value) -> Option<String> {
     let room_id = serde_json::from_value::<SigiStateResponse>(value.clone())
         .ok()
@@ -1274,10 +1280,9 @@ fn extract_room_id_from_check_alive(value: &Value) -> Option<String> {
         let status = get_i64_field(map, &["status", "live_status", "liveStatus"]);
         if let Some(status) = status {
             saw_status = true;
-            if status == 1 || status == 2 {
+            if is_tiktok_live_status_flag(status) {
                 return Some(room_id);
             }
-            continue;
         }
         let alive = map
             .get("is_alive")
@@ -2997,14 +3002,14 @@ fn extract_room_info_from_live_room(
         .and_then(|map| find_cover_url(&Value::Object(map.clone())))
         .unwrap_or_default();
 
+    let has_stream = extract_stream_from_live_room(live_room_info)
+        .and_then(|stream| stream.hls_url.or(stream.rtmp_url))
+        .is_some();
     let status_flag = status.or(live_room_status);
-    let live_status = if let Some(flag) = status_flag {
-        flag == 2
-    } else {
-        extract_stream_from_live_room(live_room_info)
-            .and_then(|stream| stream.hls_url.or(stream.rtmp_url))
-            .is_some()
-    };
+    let live_status = has_stream
+        || status_flag
+            .map(is_tiktok_live_status_flag)
+            .unwrap_or(false);
 
     let extracted_name = extract_username_from_url(url);
     let final_user_name = if !user_name.is_empty() {
@@ -3523,14 +3528,20 @@ fn extract_room_info_from_room_data(
         .unwrap_or_default();
     let room_cover_url = find_cover_url(room_data).unwrap_or_default();
 
-    let live_status = if let Some(flag) = status {
-        flag == 2
-    } else {
-        room_data
+    let has_stream = !extract_stream_candidates_from_room_info(room_data).is_empty()
+        || room_data
             .get("stream_url")
             .or_else(|| room_data.get("streamUrl"))
-            .is_some()
-    };
+            .and_then(|stream| {
+                stream
+                    .get("hls_pull_url")
+                    .or_else(|| stream.get("rtmp_pull_url"))
+                    .or_else(|| stream.get("flv_pull_url"))
+            })
+            .and_then(extract_first_string)
+            .is_some();
+
+    let live_status = has_stream || status.map(is_tiktok_live_status_flag).unwrap_or(false);
 
     let extracted_name = extract_username_from_url(url);
     let final_user_name = if !user_name.is_empty() {
