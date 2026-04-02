@@ -21,7 +21,6 @@ use recorder::platforms::douyin;
 use recorder::platforms::PlatformType;
 use recorder::platforms::{huya, kuaishou, tiktok};
 use recorder::RecorderInfo;
-#[cfg(feature = "gui")]
 use serde::Deserialize;
 use serde::Serialize;
 

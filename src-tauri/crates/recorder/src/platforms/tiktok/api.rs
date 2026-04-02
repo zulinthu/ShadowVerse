@@ -71,6 +71,7 @@ pub struct RoomInfo {
     pub user_id: String,
     pub user_name: String,
     pub user_avatar: String,
+    pub stream_info: Option<StreamInfo>,
 }
 
 #[derive(Clone, Debug)]
@@ -2674,6 +2675,40 @@ fn extract_stream_from_live_room(live_room_info: &Value) -> Option<StreamInfo> {
     })
 }
 
+fn stream_info_from_candidates(candidates: &[StreamCandidate]) -> Option<StreamInfo> {
+    let best = candidates.first()?;
+    Some(StreamInfo {
+        hls_url: best.hls_url.clone(),
+        rtmp_url: best.flv_url.clone(),
+        resolution: Some(best.resolution.clone()),
+    })
+}
+
+fn extract_basic_stream_info_from_room_data(room_data: &Value) -> Option<StreamInfo> {
+    let stream_url = room_data
+        .get("stream_url")
+        .or_else(|| room_data.get("streamUrl"));
+    let hls_url = stream_url
+        .and_then(|v| v.get("hls_pull_url"))
+        .and_then(extract_first_string);
+    let mut rtmp_url = stream_url
+        .and_then(|v| v.get("rtmp_pull_url"))
+        .and_then(extract_first_string);
+    if rtmp_url.is_none() {
+        rtmp_url = stream_url
+            .and_then(|v| v.get("flv_pull_url"))
+            .and_then(extract_first_string);
+    }
+    if hls_url.is_none() && rtmp_url.is_none() {
+        return None;
+    }
+    Some(StreamInfo {
+        hls_url,
+        rtmp_url,
+        resolution: None,
+    })
+}
+
 async fn check_url_accessible(client: &Client, headers: &HeaderMap, url: &str) -> bool {
     if url.contains(".m3u8") {
         return check_hls_stream_accessible(client, headers, url).await;
@@ -3006,9 +3041,8 @@ fn extract_room_info_from_live_room(
         .and_then(|map| find_cover_url(&Value::Object(map.clone())))
         .unwrap_or_default();
 
-    let has_stream = extract_stream_from_live_room(live_room_info)
-        .and_then(|stream| stream.hls_url.or(stream.rtmp_url))
-        .is_some();
+    let stream_info = extract_stream_from_live_room(live_room_info);
+    let has_stream = stream_info.is_some();
     let status_flag = status.or(live_room_status);
     let live_status = has_stream
         || status_flag
@@ -3048,6 +3082,7 @@ fn extract_room_info_from_live_room(
         user_id: final_user_id,
         user_name: final_user_name,
         user_avatar,
+        stream_info,
     })
 }
 
@@ -3535,18 +3570,10 @@ fn extract_room_info_from_room_data(
         .unwrap_or_default();
     let room_cover_url = find_cover_url(room_data).unwrap_or_default();
 
-    let has_stream = !extract_stream_candidates_from_room_info(room_data).is_empty()
-        || room_data
-            .get("stream_url")
-            .or_else(|| room_data.get("streamUrl"))
-            .and_then(|stream| {
-                stream
-                    .get("hls_pull_url")
-                    .or_else(|| stream.get("rtmp_pull_url"))
-                    .or_else(|| stream.get("flv_pull_url"))
-            })
-            .and_then(extract_first_string)
-            .is_some();
+    let candidates = extract_stream_candidates_from_room_info(room_data);
+    let stream_info =
+        stream_info_from_candidates(&candidates).or_else(|| extract_basic_stream_info_from_room_data(room_data));
+    let has_stream = stream_info.is_some();
 
     let live_status = has_stream || status.map(is_tiktok_live_status_flag).unwrap_or(false);
 
@@ -3583,6 +3610,7 @@ fn extract_room_info_from_room_data(
         user_id: final_user_id,
         user_name: final_user_name,
         user_avatar,
+        stream_info,
     })
 }
 
@@ -3749,6 +3777,7 @@ HTML: ".to_string()
                 user_id: "".to_string(),
                 user_name: "TikTok Live Not Started".to_string(),
                 user_avatar: "".to_string(),
+                stream_info: None,
             });
         }
 

@@ -578,7 +578,7 @@ async fn setup_server_state(args: Args) -> Result<State, Box<dyn std::error::Err
         }
     }
     let config_snapshot = config.read().await.clone();
-    crate::handlers::account::ensure_default_accounts(&db, &config_snapshot).await;
+    crate::handlers::account::ensure_login_accounts(&db, &config_snapshot).await;
     crate::handlers::account::ensure_guest_accounts(&db, &config_snapshot).await;
 
     let progress_manager = Arc::new(ProgressManager::new());

@@ -337,7 +337,7 @@ impl TikTokRecorder {
 
                 // Some TikTok endpoints intermittently report "not live" while stream URLs are already available.
                 // Probe stream as a fallback to avoid false "未开播" states.
-                let mut fallback_stream: Option<api::StreamInfo> = None;
+                let mut fallback_stream: Option<api::StreamInfo> = room_info.stream_info.clone();
                 if !live_status {
                     let fallback = self
                         .resolve_stream_info_with_timeout(&url, feed_override, 6)

@@ -8,7 +8,6 @@ use recorder::platforms::PlatformType;
 #[cfg(feature = "gui")]
 use tauri::Manager;
 
-#[cfg(feature = "gui")]
 #[cfg_attr(feature = "gui", tauri::command)]
 pub async fn get_config(state: state_type!()) -> Result<Config, ()> {
     let mut config = state.config.read().await.clone();

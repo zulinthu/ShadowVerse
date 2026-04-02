@@ -21,6 +21,7 @@ use recorder::platforms::{
 use recorder::UserInfo;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+#[cfg(feature = "gui")]
 use tauri::Emitter;
 use url::Url;
 
@@ -747,6 +748,7 @@ pub async fn update_login_account(
         }
         remove_login_account_by_platform_from_paths(&paths, &platform);
 
+        #[cfg(feature = "gui")]
         let _ = state.app_handle.emit("accounts-updated", ());
         return Ok(());
     }

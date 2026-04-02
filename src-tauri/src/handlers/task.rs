@@ -1,4 +1,3 @@
-#[cfg(feature = "gui")]
 use crate::state::State;
 use crate::{database::task::TaskRow, state_type};
 
