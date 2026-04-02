@@ -56,6 +56,7 @@
   let dragMoveRaf = 0;
   let summaryTimer: ReturnType<typeof setInterval> | null = null;
   let reloadPendingKeys = new Set<string>();
+  let manualPendingKeys = new Set<string>();
 
   function roomKey(room: RecorderInfo) {
     return `${room.room_info.platform}:${room.room_info.room_id}`;
@@ -603,6 +604,77 @@
       summary = { ...summary, recorders: [...summary.recorders] };
       console.error("Failed to toggle room enable state:", error);
       await message("切换直播间开关失败", { title: "操作失败", kind: "error" });
+    }
+  }
+
+  function setManualPending(room: RecorderInfo, pending: boolean) {
+    const key = roomKey(room);
+    if (pending) {
+      manualPendingKeys.add(key);
+    } else {
+      manualPendingKeys.delete(key);
+    }
+    manualPendingKeys = new Set(manualPendingKeys);
+  }
+
+  async function startRecordManually(room: RecorderInfo) {
+    const key = roomKey(room);
+    if (manualPendingKeys.has(key) || room.recording) return;
+
+    const prevEnabled = room.enabled;
+    room.enabled = true;
+    summary = { ...summary, recorders: [...summary.recorders] };
+    setManualPending(room, true);
+
+    try {
+      await invoke("set_enable", {
+        roomId: room.room_info.room_id,
+        platform: room.room_info.platform,
+        enabled: true,
+      });
+      try {
+        await invoke("reload_recorder", {
+          roomId: room.room_info.room_id,
+          platform: room.room_info.platform,
+        });
+      } catch (e) {
+        // Ignore reload cooldown errors; enable state has already been applied.
+        console.warn("Manual start reload skipped:", e);
+      }
+      await update_summary(true);
+    } catch (error) {
+      room.enabled = prevEnabled;
+      summary = { ...summary, recorders: [...summary.recorders] };
+      console.error("Failed to start recording manually:", error);
+      await message("手动开始录制失败", { title: "操作失败", kind: "error" });
+    } finally {
+      setManualPending(room, false);
+    }
+  }
+
+  async function stopRecordManually(room: RecorderInfo) {
+    const key = roomKey(room);
+    if (manualPendingKeys.has(key) || !room.recording) return;
+
+    const prevEnabled = room.enabled;
+    room.enabled = false;
+    summary = { ...summary, recorders: [...summary.recorders] };
+    setManualPending(room, true);
+
+    try {
+      await invoke("set_enable", {
+        roomId: room.room_info.room_id,
+        platform: room.room_info.platform,
+        enabled: false,
+      });
+      await update_summary(true);
+    } catch (error) {
+      room.enabled = prevEnabled;
+      summary = { ...summary, recorders: [...summary.recorders] };
+      console.error("Failed to stop recording manually:", error);
+      await message("手动停止录制失败", { title: "操作失败", kind: "error" });
+    } finally {
+      setManualPending(room, false);
     }
   }
 
@@ -1184,7 +1256,13 @@
                 {/if}
               </div>
             {/if}
-            {#if !room.room_info.status}
+            {#if room.recording}
+              <div
+                class={"absolute bottom-2 right-2 p-1.5 px-2 rounded-md text-white text-xs flex items-center justify-center bg-red-500"}
+              >
+                <span>录制进行中</span>
+              </div>
+            {:else if !room.room_info.status}
               <div
                 class={"absolute bottom-2 right-2 p-1.5 px-2 rounded-md text-white text-xs flex items-center justify-center bg-gray-700"}
               >
@@ -1269,6 +1347,32 @@
                 </button>
               </div>
               <div class="flex items-center space-x-1">
+                <button
+                  class={"px-2.5 py-1 text-xs rounded-lg border " +
+                    (room.recording || manualPendingKeys.has(roomKey(room))
+                      ? "border-gray-200 text-gray-400 dark:border-gray-700 dark:text-gray-500 cursor-not-allowed"
+                      : "border-green-300 text-green-700 dark:border-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20")}
+                  title="手动开始录制"
+                  disabled={room.recording || manualPendingKeys.has(roomKey(room))}
+                  on:click={async () => {
+                    await startRecordManually(room);
+                  }}
+                >
+                  开始
+                </button>
+                <button
+                  class={"px-2.5 py-1 text-xs rounded-lg border " +
+                    (!room.recording || manualPendingKeys.has(roomKey(room))
+                      ? "border-gray-200 text-gray-400 dark:border-gray-700 dark:text-gray-500 cursor-not-allowed"
+                      : "border-red-300 text-red-700 dark:border-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20")}
+                  title="手动停止录制"
+                  disabled={!room.recording || manualPendingKeys.has(roomKey(room))}
+                  on:click={async () => {
+                    await stopRecordManually(room);
+                  }}
+                >
+                  停止
+                </button>
                 <button
                   class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
                   title={room.recording ? "播放预览" : "打开网页直播间"}
