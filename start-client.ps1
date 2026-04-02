@@ -13,7 +13,12 @@ if (!(Test-Path $vcvars)) {
 }
 
 # Import MSVC build environment into current PowerShell session.
-cmd /c "\"$vcvars\" && set" | ForEach-Object {
+$vcvarsEnvLines = & cmd.exe /s /c "`"$vcvars`" && set"
+if ($LASTEXITCODE -ne 0) {
+  throw "Failed to initialize MSVC environment from vcvars64.bat (exit code: $LASTEXITCODE)"
+}
+
+$vcvarsEnvLines | ForEach-Object {
   if ($_ -match "^(.*?)=(.*)$") {
     Set-Item -Path "env:$($matches[1])" -Value $matches[2]
   }

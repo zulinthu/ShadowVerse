@@ -1283,6 +1283,7 @@ fn find_live_stream_response(value: &Value) -> Option<LiveStreamResponse> {
     best.map(|(_, response)| response)
 }
 
+#[allow(dead_code)]
 fn parse_live_stream_response(json_str: &str) -> Result<LiveStreamResponse, RecorderError> {
     let livestream_regex = Regex::new(r#"(?s)(\{"liveStream".*?),"gameInfo"#).map_err(|e| {
         RecorderError::ApiError {
@@ -4871,6 +4872,7 @@ fn find_string_value(value: &Value, keys: &[&str]) -> Option<String> {
     }
 }
 
+#[allow(dead_code)]
 fn is_title_useful(title: &str, author_name: &str) -> bool {
     let trimmed = title.trim();
     if trimmed.is_empty() {
