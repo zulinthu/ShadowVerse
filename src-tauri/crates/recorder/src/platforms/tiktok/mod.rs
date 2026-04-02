@@ -239,6 +239,49 @@ impl TikTokRecorder {
         self.room_id.chars().all(|c| c.is_ascii_digit())
     }
 
+    async fn resolve_stream_info(
+        &self,
+        url: &str,
+        feed_override: Option<&str>,
+    ) -> Result<api::StreamInfo, RecorderError> {
+        if self.is_room_id_numeric() {
+            match api::get_stream_url_by_room_id(&self.client, &self.account, &self.room_id).await {
+                Ok(info) => Ok(info),
+                Err(_) => {
+                    api::get_stream_url_with_feed_override(
+                        &self.client,
+                        &self.account,
+                        url,
+                        feed_override,
+                    )
+                    .await
+                }
+            }
+        } else {
+            api::get_stream_url_with_feed_override(&self.client, &self.account, url, feed_override)
+                .await
+        }
+    }
+
+    async fn resolve_stream_info_with_timeout(
+        &self,
+        url: &str,
+        feed_override: Option<&str>,
+        timeout_secs: u64,
+    ) -> Result<api::StreamInfo, RecorderError> {
+        match tokio::time::timeout(
+            Duration::from_secs(timeout_secs),
+            self.resolve_stream_info(url, feed_override),
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => Err(RecorderError::ApiError {
+                error: format!("TikTok stream probe timeout after {}s", timeout_secs),
+            }),
+        }
+    }
+
     async fn check_status(&self) -> bool {
         let pre_live_status = self.room_info.read().await.status;
 
@@ -276,34 +319,9 @@ impl TikTokRecorder {
                 // Probe stream as a fallback to avoid false "未开播" states.
                 let mut fallback_stream: Option<api::StreamInfo> = None;
                 if !live_status {
-                    let fallback = if self.is_room_id_numeric() {
-                        match api::get_stream_url_by_room_id(
-                            &self.client,
-                            &self.account,
-                            &self.room_id,
-                        )
-                        .await
-                        {
-                            Ok(info) => Ok(info),
-                            Err(_) => {
-                                api::get_stream_url_with_feed_override(
-                                    &self.client,
-                                    &self.account,
-                                    &url,
-                                    feed_override,
-                                )
-                                .await
-                            }
-                        }
-                    } else {
-                        api::get_stream_url_with_feed_override(
-                            &self.client,
-                            &self.account,
-                            &url,
-                            feed_override,
-                        )
-                        .await
-                    };
+                    let fallback = self
+                        .resolve_stream_info_with_timeout(&url, feed_override, 6)
+                        .await;
 
                     if let Ok(stream_info) = fallback {
                         live_status = true;
@@ -348,29 +366,9 @@ impl TikTokRecorder {
 
                 let new_stream = if let Some(stream_info) = fallback_stream {
                     Ok(stream_info)
-                } else if self.is_room_id_numeric() {
-                    match api::get_stream_url_by_room_id(&self.client, &self.account, &self.room_id)
-                        .await
-                    {
-                        Ok(info) => Ok(info),
-                        Err(_) => {
-                            api::get_stream_url_with_feed_override(
-                                &self.client,
-                                &self.account,
-                                &url,
-                                feed_override,
-                            )
-                            .await
-                        }
-                    }
                 } else {
-                    api::get_stream_url_with_feed_override(
-                        &self.client,
-                        &self.account,
-                        &url,
-                        feed_override,
-                    )
-                    .await
+                    self.resolve_stream_info_with_timeout(&url, feed_override, 10)
+                        .await
                 };
 
                 match new_stream {
@@ -416,34 +414,9 @@ impl TikTokRecorder {
 
                 // If room-info APIs are blocked/intermittent, fall back to direct stream probing.
                 if !pre_live_status {
-                    let fallback_stream = if self.is_room_id_numeric() {
-                        match api::get_stream_url_by_room_id(
-                            &self.client,
-                            &self.account,
-                            &self.room_id,
-                        )
-                        .await
-                        {
-                            Ok(info) => Ok(info),
-                            Err(_) => {
-                                api::get_stream_url_with_feed_override(
-                                    &self.client,
-                                    &self.account,
-                                    &url,
-                                    feed_override,
-                                )
-                                .await
-                            }
-                        }
-                    } else {
-                        api::get_stream_url_with_feed_override(
-                            &self.client,
-                            &self.account,
-                            &url,
-                            feed_override,
-                        )
-                        .await
-                    };
+                    let fallback_stream = self
+                        .resolve_stream_info_with_timeout(&url, feed_override, 6)
+                        .await;
 
                     if let Ok(stream_info) = fallback_stream {
                         *self.extra.stream_info.write().await = Some(stream_info);
