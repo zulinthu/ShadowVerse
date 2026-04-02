@@ -41,7 +41,7 @@
       enabled: false,
       encode_danmu: false,
     },
-    status_check_interval: 67, // 默认67秒
+    status_check_interval: 15, // 默认15秒
     record_protocol_preference: "hls",
     whisper_language: "",
     webhook_url: "",

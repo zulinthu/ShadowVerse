@@ -276,7 +276,7 @@ fn default_auto_generate_config() -> AutoGenerateConfig {
 }
 
 fn default_status_check_interval() -> u64 {
-    77
+    15
 }
 
 fn default_record_protocol_preference() -> String {
@@ -796,6 +796,11 @@ impl Config {
             if let Ok(mut config) = toml::from_str::<Config>(&content) {
                 let mut needs_save = false;
                 config.config_path = config_path.to_str().unwrap().into();
+                // Migrate legacy slow defaults so live status can refresh faster.
+                if matches!(config.status_check_interval, 67 | 77) {
+                    config.status_check_interval = default_status_check_interval();
+                    needs_save = true;
+                }
                 config.update_interval = Arc::new(AtomicU64::new(config.status_check_interval));
                 if config.reverse_generate_path.trim().is_empty() {
                     if let Some(path) = Self::infer_reverse_generate_dir() {

@@ -721,12 +721,11 @@ impl RecorderTrait<TikTokExtra> for TikTokRecorder {
                     continue;
                 }
 
-                let interval = self_clone.update_interval.load(atomic::Ordering::Relaxed);
-                let sleep_secs = if interval <= 10 {
-                    rand::random::<u64>() % 11 + 10
-                } else {
-                    interval + rand::random::<u64>() % 5
-                };
+                let interval = self_clone
+                    .update_interval
+                    .load(atomic::Ordering::Relaxed)
+                    .max(10);
+                let sleep_secs = crate::utils::jitter_interval_secs(interval, 3);
                 tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
             }
         }));
