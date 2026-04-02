@@ -447,7 +447,7 @@ impl RecorderManager {
                     }
                 }
                 RecorderEvent::LiveEnd {
-                    platform,
+                    platform: _platform,
                     room_id,
                     recorder,
                 } => {
@@ -456,7 +456,6 @@ impl RecorderManager {
                         Payload::Room(recorder.clone()),
                     );
                     let _ = self.webhook_poster.post_event(&event).await;
-                    self.handle_live_end(platform, &room_id, &recorder).await;
                     if self.config.read().await.live_end_notify {
                         #[cfg(feature = "gui")]
                         self.app_handle
@@ -559,6 +558,11 @@ impl RecorderManager {
                             .join(live_id);
                         let _ = tokio::fs::remove_dir_all(&cache_folder).await;
                         log::info!("Record folder removed: {cache_folder:?}");
+                    } else {
+                        // Trigger auto-generate on record end so manual stop can also produce mp4.
+                        let platform = PlatformType::from_str(&recorder.room_info.platform)
+                            .unwrap_or(PlatformType::BiliBili);
+                        self.handle_live_end(platform, &room_id, &recorder).await;
                     }
                 }
                 RecorderEvent::ProgressUpdate { id, content } => {
