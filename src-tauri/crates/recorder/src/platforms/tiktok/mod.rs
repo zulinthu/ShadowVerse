@@ -270,7 +270,48 @@ impl TikTokRecorder {
                     }
                 }
 
-                let live_status = room_info.live_status;
+                let mut live_status = room_info.live_status;
+
+                // Some TikTok endpoints intermittently report "not live" while stream URLs are already available.
+                // Probe stream as a fallback to avoid false "未开播" states.
+                let mut fallback_stream: Option<api::StreamInfo> = None;
+                if !live_status {
+                    let fallback = if self.is_room_id_numeric() {
+                        match api::get_stream_url_by_room_id(
+                            &self.client,
+                            &self.account,
+                            &self.room_id,
+                        )
+                        .await
+                        {
+                            Ok(info) => Ok(info),
+                            Err(_) => {
+                                api::get_stream_url_with_feed_override(
+                                    &self.client,
+                                    &self.account,
+                                    &url,
+                                    feed_override,
+                                )
+                                .await
+                            }
+                        }
+                    } else {
+                        api::get_stream_url_with_feed_override(
+                            &self.client,
+                            &self.account,
+                            &url,
+                            feed_override,
+                        )
+                        .await
+                    };
+
+                    if let Ok(stream_info) = fallback {
+                        live_status = true;
+                        self.room_info.write().await.status = true;
+                        fallback_stream = Some(stream_info);
+                        self.log_info("Room marked live by stream probe fallback");
+                    }
+                }
 
                 if pre_live_status != live_status {
                     self.log_info(&format!(
@@ -305,7 +346,9 @@ impl TikTokRecorder {
                     return true;
                 }
 
-                let new_stream = if self.is_room_id_numeric() {
+                let new_stream = if let Some(stream_info) = fallback_stream {
+                    Ok(stream_info)
+                } else if self.is_room_id_numeric() {
                     match api::get_stream_url_by_room_id(&self.client, &self.account, &self.room_id)
                         .await
                     {
