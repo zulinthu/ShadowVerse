@@ -395,7 +395,16 @@ impl TikTokRecorder {
                 }
             }
             Err(e) => {
-                if self.account.is_guest() && is_guest_cookie_block_error(&e) {
+                let error_text = e.to_string().to_ascii_lowercase();
+                let should_force_guest_refresh = error_text.contains("room enter status: 403")
+                    || error_text.contains("feed empty response body")
+                    || error_text.contains("live room id unavailable")
+                    || error_text.contains("failed to extract tiktok state");
+
+                if self.account.is_guest()
+                    && (is_guest_cookie_block_error(&e) || should_force_guest_refresh)
+                {
+                    self.log_info("Triggering guest cookie refresh due to TikTok room check failure");
                     let _ = self
                         .event_channel
                         .send(RecorderEvent::GuestCookieRefreshRequested {
