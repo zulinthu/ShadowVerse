@@ -721,11 +721,13 @@ impl RecorderTrait<TikTokExtra> for TikTokRecorder {
                     continue;
                 }
 
-                let interval = self_clone
+                let configured_interval = self_clone
                     .update_interval
                     .load(atomic::Ordering::Relaxed)
-                    .max(10);
-                let sleep_secs = crate::utils::jitter_interval_secs(interval, 3);
+                    .max(2);
+                // Keep TikTok status monitoring near real-time while offline.
+                let interval = std::cmp::min(configured_interval, 3);
+                let sleep_secs = crate::utils::jitter_interval_secs(interval, 1);
                 tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
             }
         }));

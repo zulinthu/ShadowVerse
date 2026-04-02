@@ -41,7 +41,7 @@
       enabled: false,
       encode_danmu: false,
     },
-    status_check_interval: 15, // 默认15秒
+    status_check_interval: 5, // 默认5秒
     record_protocol_preference: "hls",
     whisper_language: "",
     webhook_url: "",
@@ -206,8 +206,8 @@
   }
 
   async function update_status_check_interval() {
-    if (setting_model.status_check_interval < 10) {
-      setting_model.status_check_interval = 10; // 最小值为10秒
+    if (setting_model.status_check_interval < 2) {
+      setting_model.status_check_interval = 2; // 最小值为2秒
     }
     await invoke("update_status_check_interval", {
       interval: setting_model.status_check_interval,

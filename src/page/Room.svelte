@@ -346,7 +346,7 @@
     }
   }
   update_summary();
-  summaryTimer = setInterval(update_summary, 5000);
+  summaryTimer = setInterval(update_summary, 1000);
 
   // modals
   let deleteModal = false;

@@ -276,7 +276,7 @@ fn default_auto_generate_config() -> AutoGenerateConfig {
 }
 
 fn default_status_check_interval() -> u64 {
-    15
+    5
 }
 
 fn default_record_protocol_preference() -> String {
@@ -797,7 +797,7 @@ impl Config {
                 let mut needs_save = false;
                 config.config_path = config_path.to_str().unwrap().into();
                 // Migrate legacy slow defaults so live status can refresh faster.
-                if matches!(config.status_check_interval, 67 | 77) {
+                if matches!(config.status_check_interval, 15 | 67 | 77) {
                     config.status_check_interval = default_status_check_interval();
                     needs_save = true;
                 }
