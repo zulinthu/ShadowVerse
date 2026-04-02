@@ -617,6 +617,22 @@
     manualPendingKeys = new Set(manualPendingKeys);
   }
 
+  async function waitForManualRecordingStart(
+    room: RecorderInfo,
+    timeoutMs = 12000,
+    intervalMs = 1000
+  ) {
+    const key = roomKey(room);
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await update_summary(true);
+      const latest = summary.recorders.find((item) => roomKey(item) === key);
+      if (latest?.recording) return true;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    return false;
+  }
+
   async function startRecordManually(room: RecorderInfo) {
     const key = roomKey(room);
     if (manualPendingKeys.has(key) || room.recording) return;
@@ -642,6 +658,13 @@
         console.warn("Manual start reload skipped:", e);
       }
       await update_summary(true);
+      const started = await waitForManualRecordingStart(room);
+      if (!started) {
+        await message(
+          "已发送开始录制，但 12 秒内未检测到录制启动。请检查代理、登录账号或稍后重试。",
+          { title: "未开始录制", kind: "warning" }
+        );
+      }
     } catch (error) {
       room.enabled = prevEnabled;
       summary = { ...summary, recorders: [...summary.recorders] };

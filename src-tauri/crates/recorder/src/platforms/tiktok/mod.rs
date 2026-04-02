@@ -23,6 +23,7 @@ use tokio::sync::{broadcast, Mutex, RwLock};
 
 const TIKTOK_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const TIKTOK_LIVE_STICKY_SECONDS: i64 = 20;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TikTokProtocol {
@@ -69,6 +70,7 @@ pub struct TikTokExtra {
     stream_info: Arc<RwLock<Option<api::StreamInfo>>>,
     pre_live_id: Arc<RwLock<Option<String>>>,
     should_continue: Arc<AtomicBool>,
+    live_sticky_until: Arc<atomic::AtomicI64>,
     feed_url_override: Option<String>,
 }
 
@@ -114,6 +116,7 @@ impl TikTokRecorder {
             stream_info: Arc::new(RwLock::new(None)),
             pre_live_id: Arc::new(RwLock::new(None)),
             should_continue: Arc::new(AtomicBool::new(false)),
+            live_sticky_until: Arc::new(atomic::AtomicI64::new(0)),
             feed_url_override: parse_feed_override(extra),
         };
 
@@ -168,6 +171,20 @@ impl TikTokRecorder {
             return None;
         }
         trimmed.parse::<u64>().ok()
+    }
+
+    fn refresh_live_sticky_until(&self) {
+        self.extra.live_sticky_until.store(
+            Utc::now().timestamp() + TIKTOK_LIVE_STICKY_SECONDS,
+            atomic::Ordering::Relaxed,
+        );
+    }
+
+    fn within_live_sticky_window(&self) -> bool {
+        self.extra
+            .live_sticky_until
+            .load(atomic::Ordering::Relaxed)
+            > Utc::now().timestamp()
     }
 
     fn prefer_protocol() -> TikTokProtocol {
@@ -314,6 +331,9 @@ impl TikTokRecorder {
                 }
 
                 let mut live_status = room_info.live_status;
+                if live_status {
+                    self.refresh_live_sticky_until();
+                }
 
                 // Some TikTok endpoints intermittently report "not live" while stream URLs are already available.
                 // Probe stream as a fallback to avoid false "未开播" states.
@@ -327,8 +347,15 @@ impl TikTokRecorder {
                         live_status = true;
                         self.room_info.write().await.status = true;
                         fallback_stream = Some(stream_info);
+                        self.refresh_live_sticky_until();
                         self.log_info("Room marked live by stream probe fallback");
                     }
+                }
+
+                if !live_status && pre_live_status && self.within_live_sticky_window() {
+                    live_status = true;
+                    self.room_info.write().await.status = true;
+                    self.log_info("Keep live status during sticky window after transient probe miss");
                 }
 
                 if pre_live_status != live_status {
@@ -377,6 +404,7 @@ impl TikTokRecorder {
                         *self.extra.stream_info.write().await = Some(stream_info.clone());
                         self.last_update
                             .store(Utc::now().timestamp(), atomic::Ordering::Relaxed);
+                        self.refresh_live_sticky_until();
 
                         self.log_info(&format!(
                             "Update to new stream: {:?} => {:?}",
@@ -423,6 +451,7 @@ impl TikTokRecorder {
                         self.last_update
                             .store(Utc::now().timestamp(), atomic::Ordering::Relaxed);
                         self.room_info.write().await.status = true;
+                        self.refresh_live_sticky_until();
                         let _ = self.event_channel.send(RecorderEvent::LiveStart {
                             recorder: self.info().await,
                         });
