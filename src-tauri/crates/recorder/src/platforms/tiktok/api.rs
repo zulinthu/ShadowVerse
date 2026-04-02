@@ -28,6 +28,7 @@ const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 const FEED_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36";
 const MOBILE_USER_AGENT: &str = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
 const TIKTOK_COOLDOWN_SECS: i64 = 120;
+const TIKTOK_WAF_RETRY_DELAY_SECS: u64 = 3;
 const TIKTOK_MSSDK_URL: &str = "https://mssdk.tiktokw.us/web/report?msToken=1Ab-7YxR9lUHSem0PraI_XzdKmpHb6j50L8AaXLAd2aWTdoJCYLfX_67rVQFE4UwwHVHmyG_NfIipqrlLT3kCXps-5PYlNAqtdwEg7TrDyTAfCKyBrOLmhMUjB55oW8SPZ4_EkNxNFUdV7MquA==";
 const TIKTOK_MSSDK_MAGIC: i64 = 538969122;
 const TIKTOK_MSSDK_VERSION: i64 = 1;
@@ -1650,7 +1651,10 @@ async fn warm_up_live_pages(client: &Client, account: &Account) {
                 break;
             }
             if is_waf_wait_page(&html_str) && attempt == 0 {
-                tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(
+                    TIKTOK_WAF_RETRY_DELAY_SECS,
+                ))
+                .await;
                 continue;
             }
             break;
@@ -3328,7 +3332,10 @@ async fn get_room_id_from_check_alive(
 
         if is_waf_wait_page(&html_str) {
             if attempt < 2 {
-                tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(
+                    TIKTOK_WAF_RETRY_DELAY_SECS,
+                ))
+                .await;
                 continue;
             }
         }
@@ -3688,7 +3695,10 @@ async fn get_room_info_with_profile(
 
         if is_waf_wait_page(&html_str) {
             if attempt < 4 {
-                tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(
+                    TIKTOK_WAF_RETRY_DELAY_SECS,
+                ))
+                .await;
                 continue;
             }
         }
@@ -3920,7 +3930,10 @@ async fn get_stream_url_with_profile(
 
         if is_waf_wait_page(&html_str) {
             if attempt < 4 {
-                tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(
+                    TIKTOK_WAF_RETRY_DELAY_SECS,
+                ))
+                .await;
                 continue;
             }
         }
