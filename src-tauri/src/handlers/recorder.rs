@@ -144,18 +144,24 @@ fn normalize_tiktok_room_id(room_id: &str) -> String {
         return without_trailing.to_string();
     }
 
-    if without_trailing.contains("live.tiktok.com") {
-        if let Some(last) = without_trailing.rsplit('/').next() {
-            if !last.is_empty() && last.chars().all(|c| c.is_ascii_digit()) {
-                return last.to_string();
+    if let Ok(parsed) = Url::parse(trimmed) {
+        if let Some(host) = parsed.host_str() {
+            let host = host.to_ascii_lowercase();
+            if host == "live.tiktok.com" {
+                if let Some(last) = without_trailing.rsplit('/').next() {
+                    if !last.is_empty() && last.chars().all(|c| c.is_ascii_digit()) {
+                        return last.to_string();
+                    }
+                }
             }
         }
-    }
 
-    if let Some(after_at) = without_trailing.split("/@").nth(1) {
-        let name = after_at.split('/').next().unwrap_or("").trim();
-        if !name.is_empty() {
-            return format!("@{}", name.trim_start_matches('@'));
+        let path = parsed.path();
+        if let Some(after_at) = path.split("/@").nth(1) {
+            let name = after_at.split('/').next().unwrap_or("").trim();
+            if !name.is_empty() {
+                return format!("@{}", name.trim_start_matches('@'));
+            }
         }
     }
 
@@ -163,13 +169,8 @@ fn normalize_tiktok_room_id(room_id: &str) -> String {
         return without_trailing.to_string();
     }
 
-    if without_trailing.contains("tiktok.com") {
-        if let Some(last) = without_trailing.rsplit('/').next() {
-            let name = last.trim_start_matches('@');
-            if !name.is_empty() && name != "live" {
-                return format!("@{}", name);
-            }
-        }
+    if trimmed.contains("://") {
+        return trimmed.to_string();
     }
 
     if trimmed.is_empty() {
@@ -177,6 +178,33 @@ fn normalize_tiktok_room_id(room_id: &str) -> String {
     } else {
         format!("@{}", trimmed.trim_start_matches('@'))
     }
+}
+
+fn is_tiktok_short_link(input: &str) -> bool {
+    let Ok(parsed) = Url::parse(input.trim()) else {
+        return false;
+    };
+    let Some(host) = parsed.host_str() else {
+        return false;
+    };
+    let host = host.to_ascii_lowercase();
+    host == "vt.tiktok.com" || host == "vm.tiktok.com"
+}
+
+async fn resolve_tiktok_short_link(input: &str) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+        .build()
+        .map_err(|e| format!("build http client failed: {e}"))?;
+
+    let response = client
+        .get(input.trim())
+        .send()
+        .await
+        .map_err(|e| format!("request short link failed: {e}"))?;
+
+    Ok(response.url().to_string())
 }
 
 fn extract_tiktok_feed_override(input: &str) -> Option<(String, String)> {
@@ -244,6 +272,19 @@ pub async fn add_recorder(
         }
     }
     if platform == PlatformType::TikTok {
+        if is_tiktok_short_link(&room_id) {
+            match resolve_tiktok_short_link(&room_id).await {
+                Ok(resolved) => {
+                    log::info!("Resolved tiktok short link: {} -> {}", room_id, resolved);
+                    room_id = resolved;
+                }
+                Err(e) => {
+                    log::warn!("Failed to resolve tiktok short link {}: {}", room_id, e);
+                    return Err(format!("Failed to resolve TikTok short link: {e}"));
+                }
+            }
+        }
+
         if let Some((feed_room_id, feed_url)) = extract_tiktok_feed_override(&room_id) {
             log::info!(
                 "Using tiktok feed override: {} -> {}",

@@ -806,6 +806,13 @@
       {
         platform: "tiktok",
         re: new RegExp(
+          String.raw`((?:bsr://)?https?://(?:vt|vm)\.tiktok\.com/[^\s]+)`,
+          "i"
+        ),
+      },
+      {
+        platform: "tiktok",
+        re: new RegExp(
           String.raw`(?:bsr://)?https?://(?:www\.)?tiktok\.com/@?([^/\?]+)/live`,
           "i"
         ),
